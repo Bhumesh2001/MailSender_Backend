@@ -11,7 +11,6 @@ const io = new Server(server, { cors: { origin: "https://mailsendr.netlify.app" 
 app.use(express.json());
 app.use(cors());
 
-app.use('/', (req, res) => res.send(`<h1>Welcome to the Node js Server</h1>`));
 app.use("/api/emails", require("./routes/emailRoutes")(io));
 
 io.on("connection", (socket) => {
