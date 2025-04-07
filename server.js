@@ -18,4 +18,6 @@ io.on("connection", (socket) => {
     socket.on("disconnect", () => console.log("❌ Client disconnected"));
 });
 
-server.listen(5000, () => console.log(`🚀 Server running on port 5000`));
+// server.listen(5000, () => console.log(`🚀 Server running on port 5000`));
+
+module.exports = app;
