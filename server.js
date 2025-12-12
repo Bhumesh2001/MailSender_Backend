@@ -1,21 +1,57 @@
-require('dotenv').config();
+require("dotenv").config();
+
 const express = require("express");
 const http = require("http");
 const cors = require("cors");
 const { Server } = require("socket.io");
 
+const emailRoutes = require("./routes/emailRoutes");
+
 const app = express();
-const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: "https://mailsendr.netlify.app" } });
+const PORT = process.env.PORT || 5000;
 
+// ==========================
+// Middleware
+// ==========================
 app.use(express.json());
-app.use(cors());
 
-app.use("/api/emails", require("./routes/emailRoutes")(io));
+app.use(cors({
+    origin: ["http://localhost:5173", "https://mailsendr.netlify.app"],
+    methods: ["GET", "POST"],
+    credentials: true
+}));
 
-io.on("connection", (socket) => {
-    console.log("🔌 Client connected!");
-    socket.on("disconnect", () => console.log("❌ Client disconnected"));
+// ==========================
+// HTTP + Socket Server Setup
+// ==========================
+const server = http.createServer(app);
+
+const io = new Server(server, {
+    cors: {
+        origin: ["http://localhost:5173", "https://mailsendr.netlify.app"],
+        methods: ["GET", "POST"]
+    }
 });
 
-server.listen(5000, () => console.log(`🚀 Server running on port 5000`));
+// ==========================
+// Routes
+// ==========================
+app.use("/api/emails", emailRoutes(io));
+
+// ==========================
+// Socket Events
+// ==========================
+io.on("connection", (socket) => {
+    console.log("🔌 Client connected:", socket.id);
+
+    socket.on("disconnect", () => {
+        console.log("❌ Client disconnected:", socket.id);
+    });
+});
+
+// ==========================
+// Start Server
+// ==========================
+server.listen(PORT, () => {
+    console.log(`🚀 Server running on http://localhost:${PORT}`);
+});

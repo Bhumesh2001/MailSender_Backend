@@ -1,54 +1,85 @@
 const nodemailer = require("nodemailer");
 
 exports.sendEmails = async (req, res, io) => {
-    const { email, appPassword, hrEmails, subject, body } = req.body;
-    const file = req.file;
+    const { email, appPassword, hrEmails, subject, body, template, cc, bcc } = req.body;
+
+    // Files (multiple attachments)
+    const files = req.files?.files || [];
 
     if (!email || !appPassword || !hrEmails || !subject || !body) {
         return res.status(400).json({ error: "All fields are required" });
     }
-
-    // Create a fast email transporter
+    
     const transporter = nodemailer.createTransport({
-        service: process.env.EMAIL_SERVICE,
-        auth: { user: email, pass: appPassword },
-        pool: true,  // Enables connection pooling
-        maxConnections: 5, // Increase simultaneous connections
-        maxMessages: Infinity // Allow unlimited messages per connection
+        host: "smtp.gmail.com",
+        port: 465,
+        secure: true, // Required for Gmail
+        auth: {
+            user: email,
+            pass: appPassword
+        },
+        pool: true,              // Enable connection pooling
+        maxConnections: 3,       // Stable for Gmail (avoid high)
+        maxMessages: 30,         // Prevent Gmail rate blocking
+        rateDelta: 2000,         // Time window (2 seconds)
+        rateLimit: 1             // 1 email per 2 seconds
     });
 
-    // Remove duplicate emails
-    const recipients = [...new Set(hrEmails.split(",").map((e) => e.trim()))];
+    // Clean HR emails
+    const recipients = [...new Set(
+        hrEmails
+            .split(",")
+            .map((e) => e.trim())
+            .filter(Boolean)
+    )];
 
     let successCount = 0;
     let failedRecipients = [];
 
-    // Send all emails in parallel using Promise.all
-    const sendEmailPromises = recipients.map(async (recipient) => {
+    for (const recipient of recipients) {
         const mailOptions = {
             from: email,
             to: recipient,
+            cc: cc || "",
+            bcc: bcc || "",
             subject,
-            text: body,
-            attachments: file ? [{ filename: file.originalname, content: file.buffer }] : [],
+            html: body,
+            attachments: files.map((f) => ({
+                filename: f.originalname,
+                content: f.buffer,
+            })),
         };
 
         try {
             await transporter.sendMail(mailOptions);
+
             successCount++;
-            io.emit("emailLog", { recipient, status: "Sent ✅", time: new Date() });
+            io.emit("emailLog", {
+                recipient,
+                status: "Sent ✓",
+                templateUsed: template,
+                time: new Date()
+            });
         } catch (error) {
             failedRecipients.push(recipient);
-            io.emit("emailLog", { recipient, status: "Failed ❌", time: new Date() });
-        }
-    });
 
-    // Wait for all emails to be sent
-    await Promise.all(sendEmailPromises);
+            io.emit("emailLog", {
+                recipient,
+                status: "Failed ✗",
+                error: error.message,
+                time: new Date()
+            });
+        }
+
+        // Gmail safe delay
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+    }
 
     res.status(200).json({
         success: true,
-        message: `Emails sent successfully to ${successCount} recipients.`,
+        template,
+        message: `Emails sent: ${successCount}, Failed: ${failedRecipients.length}`,
+        successCount,
         failedRecipients,
     });
 };
